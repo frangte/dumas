@@ -8,6 +8,12 @@ PUT = "PUT"
 PATCH = "PATCH"
 
 
+def is_subclass(cls, baseclass):
+    if isclass(cls):
+        return issubclass(cls, baseclass)
+    return False
+
+
 class ExtraReadOnlyField(object):
     def get_extra_read_only_fields(self):
         method = self.context["request"].method
@@ -63,6 +69,9 @@ class FlexToPresentMixin(object):
     @property
     def flex_represent_fields(self) -> dict:
         if hasattr(self, "Meta") and hasattr(self.Meta, "flex_represent_fields"):
+            assert isinstance(self.Meta.flex_represent_fields, dict), (
+                "`flex_represent_fields` "
+            )
             return self.Meta.flex_represent_fields
         return {}
 
@@ -87,12 +96,13 @@ class FlexToPresentMixin(object):
                 "Types support is callable, serializer class or import path of serializer"
             )
 
+            # If it is string that maybe import path of Serializer class, we try to import.
             if isinstance(presenter, str):
                 presenter = import_string(presenter)
 
             is_callable = callable(presenter)
-            is_serializer_class = (isclass(presenter) and not issubclass(presenter, Serializer))
-            if not isclass or not is_serializer_class:
+            is_serializer_class = is_subclass(presenter, Serializer)
+            if not is_callable and not is_serializer_class:
                 raise AttributeError(
                     f"Type of `presenter` not support, expected `callable`, `Serializer` got {presenter.__class__}"
                 )
@@ -109,21 +119,21 @@ class FlexToPresentMixin(object):
                 data = data.all()
                 many = True
 
-            to_present_data = None
+            presented_data = None
             if is_serializer_class:
-                to_present_data = presenter(
+                presented_data = presenter(
                     instance=data,
                     many=many,
                     context=context
                 ).data
             elif is_callable:
                 if many:
-                    to_present_data = [presenter(it) for it in data]
+                    presented_data = [presenter(it) for it in data]
                 else:
-                    to_present_data = presenter(data)
+                    presented_data = presenter(data)
             else:
                 pass
             
-            ret[field_name] = to_present_data
+            ret[field_name] = presented_data
 
         return ret
